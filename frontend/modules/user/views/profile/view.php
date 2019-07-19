@@ -3,6 +3,7 @@
 /* @var \yii\web\View $this */
 /* @var \frontend\models\User $user */
 
+use yii\helpers\Url;
 use yii\helpers\Html;
 
 ?>
@@ -11,3 +12,5 @@ use yii\helpers\Html;
 <hr>
 <h4><b>Обо мне:</b></h4>
 <p><?= Html::encode($user->about) ?></p>
+<a href="<?= Url::to(['/user/profile/subscribe', 'id' => $user->id]); ?>" class="btn btn-primary">Подписаться</a>
+<a href="<?= Url::to(['/user/profile/unsubscribe', 'id' => $user->id]); ?>" class="btn btn-primary">Отписаться</a>
