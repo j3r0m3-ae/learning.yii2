@@ -220,4 +220,22 @@ class User extends ActiveRecord implements IdentityInterface
     {
         return $this->nickname ? $this->nickname : $this->id;
     }
+
+    /**
+     * @param User $user
+     */
+    public function subscribe(User $user)
+    {
+        Yii::$app->redis->sadd("user:$this->id:subscriptions", $user->id);
+        Yii::$app->redis->sadd("user:$user->id:followers", $this->id);
+    }
+
+    /**
+     * @param User $user
+     */
+    public function unsubscribe(User $user)
+    {
+        Yii::$app->redis->srem("user:$this->id:subscriptions", $user->id);
+        Yii::$app->redis->srem("user:$user->id:followers", $this->id);
+    }
 }
