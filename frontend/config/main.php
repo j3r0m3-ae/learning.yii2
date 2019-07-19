@@ -45,6 +45,8 @@ return [
             'enablePrettyUrl' => true,
             'showScriptName' => false,
             'rules' => [
+                'profiles' => 'user/profile/index',
+                'profile/<slug:\w+>' => 'user/profile/view'
             ],
         ],
     ],

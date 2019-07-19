@@ -4,6 +4,7 @@
 /* @var \frontend\models\User[] $users */
 
 use yii\helpers\Url;
+use yii\helpers\Html;
 
 ?>
 <?php $this->title = 'Профили'; ?>
@@ -11,7 +12,7 @@ use yii\helpers\Url;
     <hr>
 <?php if(!empty($users)): ?>
     <?php foreach($users as $user): ?>
-        <a href="<?= Url::to(['profile/view', 'id' => $user->id])?>"><?= $user->username ?></a>
+        <a href="<?= Url::to(['profile/view', 'slug' => $user->getSlug()])?>"><?= Html::encode($user->username) ?></a>
         <hr>
     <?php endforeach; ?>
 <?php endif; ?>

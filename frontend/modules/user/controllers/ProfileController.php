@@ -21,19 +21,30 @@ class ProfileController extends Controller
     }
 
     /**
-     * @param integer $id User id
+     * @param string $slug
      * @return string
-     * @throws NotFoundHttpException
+
      */
-    public function actionView($id)
+    public function actionView($slug)
     {
-        $user = User::findOne($id);
-        if(!$user) {
-            throw new NotFoundHttpException('Пользователь не найден');
-        }
+        $user = $this->findUserBySlug($slug);
 
         return $this->render('view', [
             'user' => $user,
         ]);
+    }
+
+    /**
+     * @param string $slug
+     * @return User
+     * @throws NotFoundHttpException
+     */
+    public function findUserBySlug($slug)
+    {
+        if($user = User::find()->where(['id' => $slug])->orWhere(['nickname' => $slug])->one()) {
+            return $user;
+        }
+
+        throw new NotFoundHttpException('Пользователь не найден');
     }
 }
