@@ -84,6 +84,9 @@ class SiteController extends Controller
                     unset($newApt);
                 }
             }
+            $jsonReg = json_encode($result[$key], JSON_UNESCAPED_UNICODE);
+
+            file_put_contents('json/jsonAcc'.$region['id'].'.txt', $jsonReg);
         }
 
         $json = json_encode($result, JSON_UNESCAPED_UNICODE);
@@ -139,6 +142,7 @@ class SiteController extends Controller
         }
 
         $json = json_encode($result, JSON_UNESCAPED_UNICODE);
+        file_put_contents('json/jsonBm.txt', $json);
 
         return $this->renderPartial('json', [
             'json' => $json
