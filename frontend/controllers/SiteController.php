@@ -1,8 +1,10 @@
 <?php
 namespace frontend\controllers;
 
+use yii\helpers\ArrayHelper;
 use yii\web\Controller;
 use Yii;
+use yii\httpclient\Client;
 
 /**
  * Site controller
@@ -44,7 +46,7 @@ class SiteController extends Controller
     public function actionJsonacc()
     {
         $regions = Yii::$app->db->createCommand('SELECT * FROM region')->queryAll();
-        $apteki = Yii::$app->db->createCommand("SELECT id, name, city, address, x_coordinate, y_coordinate, region_id FROM apteki_acc")->queryAll();
+        $apteki = Yii::$app->db->createCommand("SELECT id, name, city, address, x_coordinate, y_coordinate, region_id, final_address FROM apteki_acc")->queryAll();
         $subways = Yii::$app->db->createCommand('SELECT * FROM subways')->queryAll();
 
         foreach ($regions as $key => $region) {
@@ -65,7 +67,7 @@ class SiteController extends Controller
                 if ($region['id'] == $apteka['region_id']) {
                     $newApt['id'] = (int) $apteka['id'];
                     $newApt['t'] = $apteka['name'];
-                    $newApt['a'] = $apteka['city'].', '.$apteka['address'];
+                    $newApt['a'] = $apteka['final_address'] ?? $apteka['city'].', '.$apteka['address'];
                     $newApt['la'] = (float) $apteka['y_coordinate'];
                     $newApt['lo'] = (float) $apteka['x_coordinate'];
                     if ($region['s']) {
@@ -99,7 +101,7 @@ class SiteController extends Controller
     public function actionJsonbm()
     {
         $regions = Yii::$app->db->createCommand('SELECT * FROM region')->queryAll();
-        $apteki = Yii::$app->db->createCommand("SELECT id, name, city, address, x_coordinate, y_coordinate, region_id FROM apteki_bm")->queryAll();
+        $apteki = Yii::$app->db->createCommand("SELECT id, name, city, address, x_coordinate, y_coordinate, region_id, final_address FROM apteki_bm")->queryAll();
         $subways = Yii::$app->db->createCommand('SELECT * FROM subways')->queryAll();
 
         foreach ($regions as $key => $region) {
@@ -120,7 +122,7 @@ class SiteController extends Controller
                 if ($region['id'] == $apteka['region_id']) {
                     $newApt['id'] = (int) $apteka['id'];
                     $newApt['t'] = $apteka['name'];
-                    $newApt['a'] = $apteka['city'].', '.$apteka['address'];
+                    $newApt['a'] = $apteka['final_address'] ?? $apteka['city'].', '.$apteka['address'];
                     $newApt['la'] = (float) $apteka['y_coordinate'];
                     $newApt['lo'] = (float) $apteka['x_coordinate'];
                     if ($region['s']) {
@@ -146,6 +148,57 @@ class SiteController extends Controller
 
         return $this->renderPartial('json', [
             'json' => $json
+        ]);
+    }
+
+    public function actionSend()
+    {
+        $apteki = Yii::$app->db->createCommand("SELECT id, city, address, region_id FROM apteki_acc WHERE address IS NOT NULL AND x_coordinate IS NULL")->queryAll();
+        $regions = Yii::$app->db->createCommand("SELECT id, t FROM region")->queryAll();
+        $apikey = '3fb96219-c77a-4c81-bdb8-d6fa448a02c2';
+        foreach ($apteki as $apteka) {
+            foreach ($regions as $region) {
+                if ($region['id'] == $apteka['region_id']) {
+                    $address = $region['t'].', '.$apteka['city'].', '.$apteka['address'];
+                    break;
+                }
+            }
+//            $coordinats = $apteka['x_coordinate']." ".$apteka['y_coordinate'];
+            $client = new Client();
+
+            $response = $client->createRequest()
+                ->setMethod('post')
+                ->setUrl('https://geocode-maps.yandex.ru/1.x/')
+                ->setData([
+                    'apikey' => $apikey,
+                    'geocode' => $address,
+//                    'geocode' => $coordinats,
+                ])
+                ->send();
+//            $data = ArrayHelper::getValue($response->getData(), 'GeoObjectCollection.featureMember', []);
+            $data = $response->getData()['GeoObjectCollection'];
+//            $count = ArrayHelper::getValue($data, 'metaDataProperty.GeocoderResponseMetaData.found');
+            $count = (int) $data['metaDataProperty']['GeocoderResponseMetaData']['found'];
+            if ($count == 1) {
+                $result = array_shift($data['featureMember']);
+                $coor = explode(' ', $result['Point']['pos']);
+                $x_coor = array_shift($coor);
+                $y_coor = array_shift($coor);
+//                $newAddress = explode(', ', $result['metaDataProperty']['GeocoderMetaData']['text']);
+//                array_shift($newAddress);
+//                $finalAddress = implode(', ', $newAddress);
+                $sql = Yii::$app->db->createCommand()
+                    ->update('apteki_acc', [
+                        'x_coordinate' => $x_coor,
+                        'y_coordinate' => $y_coor,
+//                        'final_address' => $finalAddress
+                    ], "id = ".$apteka['id']);
+                $sql->execute();
+            }
+        }
+
+        return $this->renderPartial('send', [
+
         ]);
     }
 
