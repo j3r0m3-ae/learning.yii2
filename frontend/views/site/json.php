@@ -1,4 +1,4 @@
 <?php
-/** @var string $json */
+/** @var array $json */
 
-echo($json);
+echo $json;
