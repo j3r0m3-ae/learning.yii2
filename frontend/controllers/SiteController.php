@@ -46,7 +46,7 @@ class SiteController extends Controller
     public function actionJsonacc()
     {
         $regions = Yii::$app->db->createCommand('SELECT * FROM region')->queryAll();
-        $apteki = Yii::$app->db->createCommand("SELECT * FROM apteki_acc WHERE address IS NOT NULL AND x_coordinate IS NOT NULL")->queryAll();
+        $apteki = Yii::$app->db->createCommand("SELECT * FROM 1_apteki_acc")->queryAll();
         $subways = Yii::$app->db->createCommand('SELECT * FROM subways')->queryAll();
 
         foreach ($regions as $key => $region) {
@@ -101,7 +101,7 @@ class SiteController extends Controller
     public function actionJsonbm()
     {
         $regions = Yii::$app->db->createCommand('SELECT * FROM region')->queryAll();
-        $apteki = Yii::$app->db->createCommand("SELECT * FROM apteki_bm WHERE address IS NOT NULL AND x_coordinate IS NOT NULL")->queryAll();
+        $apteki = Yii::$app->db->createCommand("SELECT * FROM 1_apteki_bm")->queryAll();
         $subways = Yii::$app->db->createCommand('SELECT * FROM subways')->queryAll();
 
         foreach ($regions as $key => $region) {
@@ -153,24 +153,23 @@ class SiteController extends Controller
 
     public function actionSend()
     {
-        $apteki = Yii::$app->db->createCommand("SELECT * FROM apteki_acc WHERE final_address IS NULL AND address IS NOT NULL AND x_coordinate IS NOT NULL")->queryAll();
-        die;
-        $regions = Yii::$app->db->createCommand("SELECT id, t FROM region")->queryAll();
+        $apteki = Yii::$app->db->createCommand("
+            SELECT ACC.id, R.t region_name, ACC.city, ACC.address
+              FROM 1_apteki_acc ACC
+              JOIN region R
+              ON ACC.region_id = R.id
+              WHERE ACC.final_address IS NULL AND ACC.region_id BETWEEN 19 AND 25
+                ")->queryAll();
+
         $apikey = '3fb96219-c77a-4c81-bdb8-d6fa448a02c2';
 
         foreach ($apteki as $apteka) {
-            foreach ($regions as $region) {
-                if ($region['id'] == $apteka['region_id']) {
-                    $address = $region['t'].', '.$apteka['city'].', '.$apteka['address'];
-                    break;
-                }
-            }
 //            $coordinats = $apteka['x_coordinate']." ".$apteka['y_coordinate'];
-//            $address = $apteka['region_name'].', '.$apteka['city'].', '.$apteka['address'];
-            $client = new Client();
+            $address = $apteka['region_name'].', '.$apteka['city'].', '.$apteka['address'];
 
+            $client = new Client();
             $response = $client->createRequest()
-                ->setMethod('post')
+                ->setMethod('get')
                 ->setUrl('https://geocode-maps.yandex.ru/1.x/')
                 ->setData([
                     'apikey' => $apikey,
@@ -178,20 +177,18 @@ class SiteController extends Controller
 //                    'geocode' => $coordinats,
                 ])
                 ->send();
-//            $data = ArrayHelper::getValue($response->getData(), 'GeoObjectCollection.featureMember', []);
-            $data = $response->getData()['GeoObjectCollection'];
-//            $count = ArrayHelper::getValue($data, 'metaDataProperty.GeocoderResponseMetaData.found');
-            $count = (int) $data['metaDataProperty']['GeocoderResponseMetaData']['found'];
+            $data = ArrayHelper::getValue($response->getData(), 'GeoObjectCollection', []);
+            $count = (int) ArrayHelper::getValue($data, 'metaDataProperty.GeocoderResponseMetaData.found');
+
             if ($count == 1) {
                 $result = array_shift($data['featureMember']);
 //                $coor = explode(' ', $result['Point']['pos']);
 //                $x_coor = array_shift($coor);
 //                $y_coor = array_shift($coor);
-                $newAddress = explode(', ', $result['metaDataProperty']['GeocoderMetaData']['text']);
-                array_shift($newAddress);
-                $finalAddress = implode(', ', $newAddress);
+                $responseAddress = ArrayHelper::getValue($result, 'metaDataProperty.GeocoderMetaData.text');
+                $finalAddress = substr($responseAddress, strpos($responseAddress, ' ') + 1);
                 $sql = Yii::$app->db->createCommand()
-                    ->update('apteki_acc', [
+                    ->update('1_apteki_acc', [
 //                        'x_coordinate' => $x_coor,
 //                        'y_coordinate' => $y_coor,
                         'final_address' => $finalAddress
