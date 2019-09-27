@@ -1,4 +1,4 @@
 <?php
-/** @var array $json */
+/** @var array $apteki */
 
-var_dump($json);
+var_dump($apteki);

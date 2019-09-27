@@ -33,20 +33,53 @@ class SiteController extends Controller
         return $this->render('index');
     }
 
-    public function actionApteki()
+    public function actionArticles()
     {
-        $file = file_get_contents('json.txt');
-        $json = json_decode($file);
+        $articles = Yii::$app->db->createCommand("SELECT id, subtitle, content FROM articles LIMIT 100")->queryAll();
+        foreach ($articles as $article) {
+            $updatedSubtitle = $this->update($article['subtitle']);
+            $updatedContent = $this->update($article['content']);
+            Yii::$app->db->createCommand('UPDATE articles SET subtitle = \''.$updatedSubtitle.'\', content = \''.$updatedContent.'\' WHERE id = '.$article['id'])->execute();
+        }
 
-        return $this->render('apteki', [
-            'json' => $json,
+
+        return $this->render('articles', [
+            'articles' => $articles
         ]);
+    }
+
+    private function update($text)
+    {
+        $text = preg_replace("#\t+#", "", $text);
+        $text = preg_replace("#\n+#", "\n", $text);
+        $text = preg_replace("#^\n#", "", $text);
+        $text = preg_replace('#\'#', '"', $text);
+        $text = preg_replace('#<div.+?>#', '', $text);
+        $text = preg_replace('#</div>#', '', $text);
+        $text = preg_replace('#&nbsp;#', ' ', $text);
+        $text = preg_replace('# class=".+?""#', '', $text);
+        $text = preg_replace('#&laquo;#', '<<', $text);
+        $text = preg_replace('#&raquo;#', '>>', $text);
+        $text = preg_replace('#&mdash;#', '-', $text);
+        $text = preg_replace('#&ndash;#', '-', $text);
+        $text = preg_replace('#<span>(.+?)</span>#', '$1', $text);
+        $text = preg_replace('#<p>(.+?)</p>#s', '$1', $text);
+        $text = preg_replace('#<!--.+?-->#s', '', $text);
+        $text = preg_replace('#<style.+?/style>#s', '', $text);
+        $text = preg_replace('#<img.+?src=""(.+?)"".+?>#', '<img src="https://www.nestlebaby.ru$1">', $text);
+        $text = preg_replace('#<iframe.+?src=""(.+?)"".+?>#', '<video src="$1">', $text);
+        $text = preg_replace('#</iframe>#', '', $text);
+        $text = preg_replace('#<a.+?href=""(.+?)"".+?>#', '<link src="https://www.nestlebaby.ru$1">', $text);
+        $text = preg_replace('#</a>#', '</link>', $text);
+
+        return $text;
     }
 
     public function actionJsonacc()
     {
-        $regions = Yii::$app->db->createCommand('SELECT * FROM region')->queryAll();
-        $apteki = Yii::$app->db->createCommand("SELECT * FROM apteki_acc WHERE address IS NOT NULL AND x_coordinate IS NOT NULL")->queryAll();
+//        ini_set('precision', -1);
+        $regions = Yii::$app->db->createCommand('SELECT * FROM region WHERE id = 4')->queryAll();
+        $apteki = Yii::$app->db->createCommand("SELECT * FROM 1_apteki_acc")->queryAll();
         $subways = Yii::$app->db->createCommand('SELECT * FROM subways')->queryAll();
 
         foreach ($regions as $key => $region) {
@@ -83,12 +116,12 @@ class SiteController extends Controller
                         }
                     }
                     $result[$key]['stores'][] = $newApt;
-                    unset($newApt);
+                    $newApt = [];
                 }
             }
             $jsonReg = json_encode($result[$key], JSON_UNESCAPED_UNICODE);
 
-//            file_put_contents('json/jsonAcc'.$region['id'].'.txt', $jsonReg);
+            file_put_contents('./json/jsonAcc'.$region['id'].'.txt', $jsonReg);
         }
 
         $json = json_encode($result, JSON_UNESCAPED_UNICODE);
@@ -101,7 +134,7 @@ class SiteController extends Controller
     public function actionJsonbm()
     {
         $regions = Yii::$app->db->createCommand('SELECT * FROM region')->queryAll();
-        $apteki = Yii::$app->db->createCommand("SELECT * FROM apteki_bm WHERE address IS NOT NULL AND x_coordinate IS NOT NULL")->queryAll();
+        $apteki = Yii::$app->db->createCommand("SELECT * FROM 1_apteki_bm")->queryAll();
         $subways = Yii::$app->db->createCommand('SELECT * FROM subways')->queryAll();
 
         foreach ($regions as $key => $region) {
@@ -138,13 +171,13 @@ class SiteController extends Controller
                         }
                     }
                     $result[$key]['stores'][] = $newApt;
-                    unset($newApt);
+                    $newApt = [];
                 }
             }
         }
 
         $json = json_encode($result, JSON_UNESCAPED_UNICODE);
-//        file_put_contents('json/jsonBm.txt', $json);
+//        file_put_contents('./json/jsonBm.txt', $json);
 
         return $this->renderPartial('json', [
             'json' => $json
@@ -153,24 +186,23 @@ class SiteController extends Controller
 
     public function actionSend()
     {
-        $apteki = Yii::$app->db->createCommand("SELECT * FROM apteki_acc WHERE final_address IS NULL AND address IS NOT NULL AND x_coordinate IS NOT NULL")->queryAll();
-        die;
-        $regions = Yii::$app->db->createCommand("SELECT id, t FROM region")->queryAll();
+        $sql = "SELECT BM.id, R.t region_name, BM.city, BM.address
+              FROM 1_apteki_bm BM
+              JOIN region R
+              ON BM.region_id = R.id
+              WHERE BM.final_address IS NULL AND BM.region_id BETWEEN 76 AND 82";
+
+        $apteki = Yii::$app->db->createCommand($sql)->queryAll();
+
         $apikey = '3fb96219-c77a-4c81-bdb8-d6fa448a02c2';
 
         foreach ($apteki as $apteka) {
-            foreach ($regions as $region) {
-                if ($region['id'] == $apteka['region_id']) {
-                    $address = $region['t'].', '.$apteka['city'].', '.$apteka['address'];
-                    break;
-                }
-            }
 //            $coordinats = $apteka['x_coordinate']." ".$apteka['y_coordinate'];
-//            $address = $apteka['region_name'].', '.$apteka['city'].', '.$apteka['address'];
-            $client = new Client();
+            $address = $apteka['region_name'].', '.$apteka['city'].', '.$apteka['address'];
 
+            $client = new Client();
             $response = $client->createRequest()
-                ->setMethod('post')
+                ->setMethod('get')
                 ->setUrl('https://geocode-maps.yandex.ru/1.x/')
                 ->setData([
                     'apikey' => $apikey,
@@ -178,25 +210,23 @@ class SiteController extends Controller
 //                    'geocode' => $coordinats,
                 ])
                 ->send();
-//            $data = ArrayHelper::getValue($response->getData(), 'GeoObjectCollection.featureMember', []);
-            $data = $response->getData()['GeoObjectCollection'];
-//            $count = ArrayHelper::getValue($data, 'metaDataProperty.GeocoderResponseMetaData.found');
-            $count = (int) $data['metaDataProperty']['GeocoderResponseMetaData']['found'];
+            $data = ArrayHelper::getValue($response->getData(), 'GeoObjectCollection', []);
+            $count = (int) ArrayHelper::getValue($data, 'metaDataProperty.GeocoderResponseMetaData.found');
+
             if ($count == 1) {
                 $result = array_shift($data['featureMember']);
 //                $coor = explode(' ', $result['Point']['pos']);
 //                $x_coor = array_shift($coor);
 //                $y_coor = array_shift($coor);
-                $newAddress = explode(', ', $result['metaDataProperty']['GeocoderMetaData']['text']);
-                array_shift($newAddress);
-                $finalAddress = implode(', ', $newAddress);
+                $responseAddress = ArrayHelper::getValue($result, 'metaDataProperty.GeocoderMetaData.text');
+                $finalAddress = substr($responseAddress, strpos($responseAddress, ' ') + 1);
                 $sql = Yii::$app->db->createCommand()
-                    ->update('apteki_acc', [
+                    ->update('1_apteki_bm', [
 //                        'x_coordinate' => $x_coor,
 //                        'y_coordinate' => $y_coor,
                         'final_address' => $finalAddress
                     ], "id = ".$apteka['id']);
-                $sql->execute();
+//                $sql->execute();
             }
         }
 
@@ -207,71 +237,90 @@ class SiteController extends Controller
 
     public function actionTest()
     {
-        $apikey = '3fb96219-c77a-4c81-bdb8-d6fa448a02c2';
-
-        $sql = 'SELECT BM.id AS bm_id, BM.name, BM.city, BM.address, BM.x_coordinate, BM.y_coordinate, R.id AS reg_id, R.t, R.tr, R.bl
-                FROM apteki_bm AS BM
+        $sql = 'SELECT BM.id AS apt_id, BM.name, BM.city, BM.address, BM.x_coordinate, BM.y_coordinate, R.id AS reg_id, R.t, R.tr, R.bl
+                FROM 1_apteki_bm AS BM
                 JOIN region AS R
-                ON BM.region_id = R.id AND R.id NOT IN (1, 2)';
-//        $sql = 'SELECT ACC.id AS acc_id, ACC.name, ACC.city, ACC.address, ACC.x_coordinate, ACC.y_coordinate, R.id AS reg_id, R.t, R.tr, R.bl
-//                FROM apteki_acc AS ACC
+                ON BM.region_id = R.id
+                WHERE R.id NOT IN (1, 2)';
+//        $sql = 'SELECT ACC.id AS apt_id, ACC.name, ACC.city, ACC.address, ACC.x_coordinate, ACC.y_coordinate, R.id AS reg_id, R.t, R.tr, R.bl
+//                FROM 1_apteki_acc AS ACC
 //                JOIN region AS R
-//                ON ACC.region_id = R.id AND R.id NOT IN (1, 2)';
+//                ON ACC.region_id = R.id
+//                WHERE R.id NOT IN (1, 2)';
 
         $apteki = Yii::$app->db->createCommand($sql)->queryAll();
 
         foreach ($apteki as $key => $apteka) {
-            $tr_new = explode(',', $apteka['tr']);
-            $bl_new = explode(',', $apteka['bl']);
+            $tr = explode(',', $apteka['tr']);
+            $bl = explode(',', $apteka['bl']);
 
-            $newApt['id'] = (int) $apteka['bm_id'];
+            $newApt['id'] = (int) $apteka['apt_id'];
             $newApt['name'] = $apteka['name'];
             $newApt['region_name'] = $apteka['t'];
             $newApt['city'] = $apteka['city'];
             $newApt['address'] = $apteka['address'];
             $newApt['y_coordinate'] = (float) $apteka['y_coordinate'];
             $newApt['x_coordinate'] = (float) $apteka['x_coordinate'];
-            $newApt['y_coor']['max'] = (float) array_shift($tr_new);
-            $newApt['y_coor']['min'] = (float) array_shift($bl_new);
-            $newApt['x_coor']['max'] = (float) array_shift($tr_new);
-            $newApt['x_coor']['min'] = (float) array_shift($bl_new);
+            $newApt['y_coor']['max'] = (float) array_shift($tr);
+            $newApt['y_coor']['min'] = (float) array_shift($bl);
+            $newApt['x_coor']['max'] = (float) array_shift($tr);
+            $newApt['x_coor']['min'] = (float) array_shift($bl);
 
             if (!($newApt['y_coordinate'] <= $newApt['y_coor']['max'] && $newApt['y_coordinate'] >= $newApt['y_coor']['min']
             && $newApt['x_coordinate'] <= $newApt['x_coor']['max'] && $newApt['x_coordinate'] >= $newApt['x_coor']['min'])) {
                 $apteki_final[] = $newApt;
             }
+            $newApt = [];
         }
 
+//        $apikey = '3fb96219-c77a-4c81-bdb8-d6fa448a02c2';
+//
 //        foreach ($apteki_final as $apteka_final) {
-//            $address = $apteka_final['region_name'].', '.$apteka_final['city'].', '.$apteka_final['address'];
+//            $address = $apteka_final['region_name'] . ', ' . $apteka_final['city'] . ', ' . $apteka_final['address'];
+//
 //            $client = new Client();
 //
 //            $response = $client->createRequest()
-//                ->setMethod('post')
+//                ->setMethod('get')
 //                ->setUrl('https://geocode-maps.yandex.ru/1.x/')
 //                ->setData([
 //                    'apikey' => $apikey,
 //                    'geocode' => $address,
 //                ])
 //                ->send();
-//            $data = $response->getData()['GeoObjectCollection'];
-//            $count = (int) $data['metaDataProperty']['GeocoderResponseMetaData']['found'];
+//
+//            $data = ArrayHelper::getValue($response->getData(), 'GeoObjectCollection', []);
+//            $count = (int)ArrayHelper::getValue($data, 'metaDataProperty.GeocoderResponseMetaData.found');
+//
 //            if ($count == 1) {
 //                $result = array_shift($data['featureMember']);
+//                $responseAddress = ArrayHelper::getValue($result, 'metaDataProperty.GeocoderMetaData.text');
+//                $finalAddress = substr($responseAddress, strpos($responseAddress, ' ') + 1);
 //                $coor = explode(' ', $result['Point']['pos']);
 //                $x_coor = array_shift($coor);
 //                $y_coor = array_shift($coor);
 //                $sql = Yii::$app->db->createCommand()
-//                    ->update('apteki_bm', [
+//                    ->update('1_apteki_acc', [
 //                        'x_coordinate' => $x_coor,
 //                        'y_coordinate' => $y_coor,
-//                    ], "id = ".$apteka_final['id']);
+//                    ], "id = " . $apteka_final['id']);
 //                $sql->execute();
 //            }
 //        }
 
+
         return $this->renderPartial('apteki', [
-            'json' => $apteki_final,
+            'apteki' => $apteki_final,
+        ]);
+    }
+
+    public function actionDecode()
+    {
+        $string = file_get_contents('./json/test1.txt');
+        $array = json_decode($string);
+
+        return $this->renderPartial('apteki', [
+            'apteki' => $array
         ]);
     }
 
